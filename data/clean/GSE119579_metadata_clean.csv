@@ -1,0 +1,13 @@
+"sample","run","biosample","dataset","tissue","condition","group","sex","age","batch"
+"GSM3377882","SRR7792596","SAMN09984114","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","male",59,NA
+"GSM3377883","SRR7792597","SAMN09984113","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","male",60,NA
+"GSM3377884","SRR7792598","SAMN09984112","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","female",56,NA
+"GSM3377885","SRR7792599","SAMN09984111","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","male",54,NA
+"GSM3377886","SRR7792600","SAMN09984110","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","female",57,NA
+"GSM3377887","SRR7792601","SAMN09984109","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","female",66,NA
+"GSM3377888","SRR7792602","SAMN09984108","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","male",67,NA
+"GSM3377889","SRR7792603","SAMN09984107","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","male",75,NA
+"GSM3377890","SRR7792604","SAMN09984106","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","female",72,NA
+"GSM3377891","SRR7792605","SAMN09984105","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","female",73,NA
+"GSM3377892","SRR7792606","SAMN09984104","GSE119579","Airway Smooth Muscle","Nonasthmatic","control","female",61,NA
+"GSM3377894","SRR7792608","SAMN09984102","GSE119579","Airway Smooth Muscle","Asthmatic","asthma","male",65,NA

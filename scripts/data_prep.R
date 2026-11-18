@@ -1,0 +1,198 @@
+library(readxl)
+library(dplyr)
+library(DESeq2)
+library(ggplot2)
+
+# ---------- 1. Load data ----------
+data_dir <- "data"
+
+load_dataset <- function(counts_file, meta_file) {
+  counts <- as.matrix(read.delim(file.path(data_dir, counts_file),
+                                 row.names = 1, check.names = FALSE))
+  storage.mode(counts) <- "integer"
+  
+  meta <- as.data.frame(read_excel(file.path(data_dir, meta_file), skip = 1))
+  rownames(meta) <- meta[["Sample Name"]]
+  
+  stopifnot(all(colnames(counts) %in% rownames(meta)))
+  meta <- meta[colnames(counts), ]
+  stopifnot(identical(rownames(meta), colnames(counts)))
+  
+  list(counts = counts, meta = meta)
+}
+
+a <- load_dataset("GSE119579_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE119579_metadata.xlsx")
+b <- load_dataset("GSE158752_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE158752_metadata.xlsx")
+
+# ---------- 2. Define variables ----------
+a$meta <- a$meta |>
+  mutate(condition = factor(disease, levels = c("Nonasthmatic", "Asthmatic")),
+         sex = factor(sex), age = as.numeric(AGE))
+
+b$meta <- b$meta |>
+  mutate(condition = factor(diagnosis, levels = c("Healthy Control", "M/M Asthma")),
+         sex = factor(gender), batch = factor(batch), age = as.numeric(AGE))
+
+# Quick checks
+dim(a$counts); dim(b$counts)
+table(a$meta$condition, a$meta$sex)
+table(b$meta$condition, b$meta$batch)
+
+# ---------- 2b. Check missing values and format ----------
+check_dataset <- function(x, meta_vars) {
+  cnt <- x$counts
+  counts_report <- c(
+    n_genes               = nrow(cnt),
+    n_samples             = ncol(cnt),
+    NA_in_counts          = sum(is.na(cnt)),
+    negative_counts       = sum(cnt < 0, na.rm = TRUE),
+    non_integer_counts    = sum(cnt != round(cnt), na.rm = TRUE),
+    duplicated_gene_ids   = sum(duplicated(rownames(cnt))),
+    empty_gene_ids        = sum(is.na(rownames(cnt)) | rownames(cnt) == ""),
+    duplicated_sample_ids = sum(duplicated(colnames(cnt))),
+    genes_all_zero        = sum(rowSums(cnt) == 0),   # reported only, filtered later
+    empty_samples         = sum(colSums(cnt) == 0)
+  )
+  meta_report <- sapply(x$meta[meta_vars], function(v)
+    sum(is.na(v) | as.character(v) == "", na.rm = TRUE))
+  names(meta_report) <- paste0("missing_meta_", names(meta_report))
+  c(counts_report, meta_report)
+}
+
+report_a <- check_dataset(a, c("condition", "sex", "age"))
+report_b <- check_dataset(b, c("condition", "sex", "age", "batch"))
+
+all_rows <- union(names(report_a), names(report_b))
+
+report <- data.frame(
+  GSE119579 = report_a[all_rows],
+  GSE158752 = report_b[all_rows],
+  row.names = all_rows
+)
+print(report)
+
+# Stop if anything critical is found (NAs, negatives, non-integers, duplicates)
+critical <- c("NA_in_counts", "negative_counts", "non_integer_counts",
+              "duplicated_gene_ids", "empty_gene_ids", "duplicated_sample_ids")
+stopifnot(all(report[critical, ] == 0))
+
+# ---------- 2c. Same genes, same order in both datasets ----------
+genes_a <- rownames(a$counts)
+genes_b <- rownames(b$counts)
+message(sprintf("Genes only in GSE119579: %d | only in GSE158752: %d | shared: %d",
+                length(setdiff(genes_a, genes_b)),
+                length(setdiff(genes_b, genes_a)),
+                length(intersect(genes_a, genes_b))))
+
+common_genes <- genes_a[genes_a %in% genes_b]   # keeps the order of GSE119579
+counts_a <- a$counts[common_genes, ]
+counts_b <- b$counts[common_genes, ]
+stopifnot(identical(rownames(counts_a), rownames(counts_b)))
+
+# ---------- 2d. Clean metadata with the same columns in both datasets ----------
+meta_a <- data.frame(
+  sample    = rownames(a$meta),
+  run       = a$meta$Run,
+  biosample = a$meta$BioSample,
+  dataset   = "GSE119579",
+  tissue    = a$meta$cell_type,
+  condition = as.character(a$meta$condition),
+  group     = ifelse(a$meta$condition == "Asthmatic", "asthma", "control"),
+  sex       = as.character(a$meta$sex),
+  age       = a$meta$age,
+  batch     = NA_character_,                     # no batch information in this dataset
+  stringsAsFactors = FALSE
+)
+
+meta_b <- data.frame(
+  sample    = rownames(b$meta),
+  run       = b$meta$Run,
+  biosample = b$meta$BioSample,
+  dataset   = "GSE158752",
+  tissue    = b$meta$cell_type,
+  condition = as.character(b$meta$condition),
+  group     = ifelse(b$meta$condition == "M/M Asthma", "asthma", "control"),
+  sex       = as.character(b$meta$sex),
+  age       = b$meta$age,
+  batch     = as.character(b$meta$batch),
+  stringsAsFactors = FALSE
+)
+
+# Final consistency checks
+stopifnot(identical(meta_a$sample, colnames(counts_a)),
+          identical(meta_b$sample, colnames(counts_b)),
+          identical(colnames(meta_a), colnames(meta_b)))
+
+# ---------- 2e. Save clean files ----------
+clean_dir <- file.path(data_dir, "clean")
+dir.create(clean_dir, recursive = TRUE, showWarnings = FALSE)
+
+write_counts <- function(m, file) {
+  write.table(data.frame(gene_id = rownames(m), m, check.names = FALSE),
+              file, sep = "\t", quote = FALSE, row.names = FALSE)
+}
+
+write_counts(counts_a, file.path(clean_dir, "GSE119579_counts_clean.tsv"))
+write_counts(counts_b, file.path(clean_dir, "GSE158752_counts_clean.tsv"))
+write.csv(meta_a, file.path(clean_dir, "GSE119579_metadata_clean.csv"), row.names = FALSE)
+write.csv(meta_b, file.path(clean_dir, "GSE158752_metadata_clean.csv"), row.names = FALSE)
+
+saveRDS(list(counts = counts_a, meta = meta_a), file.path(clean_dir, "GSE119579_clean.rds"))
+saveRDS(list(counts = counts_b, meta = meta_b), file.path(clean_dir, "GSE158752_clean.rds"))
+
+# Verify that the saved files read back identically
+chk <- as.matrix(read.delim(file.path(clean_dir, "GSE119579_counts_clean.tsv"),
+                            row.names = 1, check.names = FALSE))
+stopifnot(all(chk == counts_a), identical(rownames(chk), rownames(counts_a)))
+
+# Use the clean, aligned matrices in the rest of the script
+a$counts <- counts_a
+b$counts <- counts_b
+
+# ---------- 3. DESeq2 object + filtering ----------
+dds_a <- DESeqDataSetFromMatrix(a$counts, a$meta, design = ~ condition)
+dds_b <- DESeqDataSetFromMatrix(b$counts, b$meta, design = ~ condition)
+
+filter_genes <- function(dds) {
+  n_min <- min(table(dds$condition))
+  keep  <- rowSums(counts(dds) >= 10) >= n_min
+  message(sprintf("Genes: %d -> %d", nrow(dds), sum(keep)))
+  dds[keep, ]
+}
+dds_a <- filter_genes(dds_a)
+dds_b <- filter_genes(dds_b)
+
+# ---------- 4. Normalization (VST) ----------
+vsd_a <- vst(dds_a, blind = TRUE)
+vsd_b <- vst(dds_b, blind = TRUE)
+
+# ---------- 5. PCA ----------
+pca_plot <- function(vsd, color, title) {
+  plotPCA(vsd, intgroup = color) +
+    labs(title = title) +
+    theme_bw()
+}
+
+# GSE119579
+p_a_condition <- pca_plot(vsd_a, "condition", "GSE119579 - condition")
+p_a_sex       <- pca_plot(vsd_a, "sex",       "GSE119579 - sex")
+
+# GSE158752
+p_b_condition <- pca_plot(vsd_b, "condition", "GSE158752 - condition")
+p_b_sex       <- pca_plot(vsd_b, "sex",       "GSE158752 - sex")
+p_b_batch     <- pca_plot(vsd_b, "batch",     "GSE158752 - batch")
+
+# Run these one by one to see each plot
+p_a_condition
+p_a_sex
+p_b_condition
+p_b_sex
+p_b_batch
+
+dir.create("results", showWarnings = FALSE)
+
+ggsave("results/PCA_GSE119579_condition.png", p_a_condition, width = 6, height = 5, dpi = 300)
+ggsave("results/PCA_GSE119579_sex.png",       p_a_sex,       width = 6, height = 5, dpi = 300)
+ggsave("results/PCA_GSE158752_condition.png", p_b_condition, width = 6, height = 5, dpi = 300)
+ggsave("results/PCA_GSE158752_sex.png",       p_b_sex,       width = 6, height = 5, dpi = 300)
+ggsave("results/PCA_GSE158752_batch.png",     p_b_batch,     width = 6, height = 5, dpi = 300)
