@@ -24,3 +24,33 @@ You can add options to executable code like this
 ```
 
 The `echo: false` option disables the printing of code (only output is displayed).
+
+# Overrepresentation analysis
+
+### Retrieve the gene ontology gene set
+
+```{r}
+library(msigdbr)
+library(fgsea)
+BP_df = msigdbr(species = "S. cerevisiae", collection = "C5", subcollection =
+"GO:BP")
+# Convert the msigdbr table into the named list of gene sets required by fora()
+BP_list = split(x = BP_df$ensembl_gene, f = BP_df$gs_name)
+MF_df = msigdbr(species = "S. cerevisiae", collection = "C5", subcollection =
+"GO:MF")
+MF_list = split(x = MF_df$ensembl_gene, f = MF_df$gs_name)
+CC_df = msigdbr(species = "S. cerevisiae", collection = "C5", subcollection =
+"GO:CC")
+CC_list = split(x = CC_df$ensembl_gene, f = CC_df$gs_name)
+```
+
+Running the fora() function
+
+```{r}
+target <- node_attributes[node_attributes$cluster %in% "cluster1",]$ID
+BP_gsea <- fora(BP_list, target, background)
+MF_gsea <- fora(MF_list, target, background)
+CC_gsea <- fora(CC_list, target, background)
+```
+
+target: name of the differentialy expressed genes
