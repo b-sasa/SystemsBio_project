@@ -1,9 +1,24 @@
+---
+title: "data_prep"
+format: html
+---
+
+### 0. Packages to use
+
+```{r}
 library(readxl)
 library(dplyr)
 library(DESeq2)
 library(ggplot2)
+```
 
-# ---------- 1. Load data ----------
+### 1. Load data
+
+Load both raw counts files and metadata files and check that samples in raw counts files and metadata files match.
+
+Assign them to objects a and b (each one dataset).
+
+```{r}
 data_dir <- "data"
 
 load_dataset <- function(counts_file, meta_file) {
@@ -24,7 +39,13 @@ load_dataset <- function(counts_file, meta_file) {
 a <- load_dataset("GSE119579_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE119579_metadata.xlsx")
 b <- load_dataset("GSE158752_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE158752_metadata.xlsx")
 
-# ---------- 2. Define variables ----------
+```
+
+### 2. Define variables 
+
+Factors that appear for metadata of each sample
+
+```{r}
 a$meta <- a$meta |>
   mutate(condition = factor(disease, levels = c("Nonasthmatic", "Asthmatic")),
          sex = factor(sex), age = as.numeric(AGE))
@@ -37,8 +58,11 @@ b$meta <- b$meta |>
 dim(a$counts); dim(b$counts)
 table(a$meta$condition, a$meta$sex)
 table(b$meta$condition, b$meta$batch)
+```
 
-# ---------- 2b. Check missing values and format ----------
+### 3. Check missing values and same format in both data sets
+
+```{r}
 check_dataset <- function(x, meta_vars) {
   cnt <- x$counts
   counts_report <- c(
@@ -75,8 +99,11 @@ print(report)
 critical <- c("NA_in_counts", "negative_counts", "non_integer_counts",
               "duplicated_gene_ids", "empty_gene_ids", "duplicated_sample_ids")
 stopifnot(all(report[critical, ] == 0))
+```
 
-# ---------- 2c. Same genes, same order in both datasets ----------
+### 4. Put genes in same order for both datasets
+
+```{r}
 genes_a <- rownames(a$counts)
 genes_b <- rownames(b$counts)
 message(sprintf("Genes only in GSE119579: %d | only in GSE158752: %d | shared: %d",
@@ -88,8 +115,11 @@ common_genes <- genes_a[genes_a %in% genes_b]   # keeps the order of GSE119579
 counts_a <- a$counts[common_genes, ]
 counts_b <- b$counts[common_genes, ]
 stopifnot(identical(rownames(counts_a), rownames(counts_b)))
+```
 
-# ---------- 2d. Clean metadata with the same columns in both datasets ----------
+### 5. Clean metadata to get same format for both datasets
+
+```{r}
 meta_a <- data.frame(
   sample    = rownames(a$meta),
   run       = a$meta$Run,
@@ -122,8 +152,11 @@ meta_b <- data.frame(
 stopifnot(identical(meta_a$sample, colnames(counts_a)),
           identical(meta_b$sample, colnames(counts_b)),
           identical(colnames(meta_a), colnames(meta_b)))
+```
 
-# ---------- 2e. Save clean files ----------
+### 6. Save clean files
+
+```{r}
 clean_dir <- file.path(data_dir, "clean")
 dir.create(clean_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -148,8 +181,11 @@ stopifnot(all(chk == counts_a), identical(rownames(chk), rownames(counts_a)))
 # Use the clean, aligned matrices in the rest of the script
 a$counts <- counts_a
 b$counts <- counts_b
+```
 
-# ---------- 3. DESeq2 object + filtering ----------
+### 7. Creating DESeq object to normalize and filter for PCAs
+
+```{r}
 dds_a <- DESeqDataSetFromMatrix(a$counts, a$meta, design = ~ condition)
 dds_b <- DESeqDataSetFromMatrix(b$counts, b$meta, design = ~ condition)
 
@@ -162,11 +198,18 @@ filter_genes <- function(dds) {
 dds_a <- filter_genes(dds_a)
 dds_b <- filter_genes(dds_b)
 
-# ---------- 4. Normalization (VST) ----------
+```
+
+### 8. Normalization
+
+```{r}
 vsd_a <- vst(dds_a, blind = TRUE)
 vsd_b <- vst(dds_b, blind = TRUE)
+```
 
-# ---------- 5. PCA ----------
+### 9. PCA and saving of plots
+
+```{r}
 pca_plot <- function(vsd, color, title) {
   plotPCA(vsd, intgroup = color) +
     labs(title = title) +
@@ -196,3 +239,4 @@ ggsave("results/PCA_GSE119579_sex.png",       p_a_sex,       width = 6, height =
 ggsave("results/PCA_GSE158752_condition.png", p_b_condition, width = 6, height = 5, dpi = 300)
 ggsave("results/PCA_GSE158752_sex.png",       p_b_sex,       width = 6, height = 5, dpi = 300)
 ggsave("results/PCA_GSE158752_batch.png",     p_b_batch,     width = 6, height = 5, dpi = 300)
+```
