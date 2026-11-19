@@ -54,3 +54,29 @@ CC_gsea <- fora(CC_list, target, background)
 ```
 
 target: name of the differentialy expressed genes
+
+background: all genes from our cleaned dataset
+
+### Calculate the enrichment 
+
+```{r}
+compute_enrichment <- function(ora, n_genes, n_universe) {
+ora$relative_risk <-
+(ora$overlap / ora$size) /
+(n_genes / n_universe)
+return(ora)
+}
+```
+
+### Function for calculating the enrichment
+
+```{r}
+BP_gsea <- compute_enrichment(BP_gsea, length(target), length(background))
+```
+
+### Top 10 significantly enriched pathways
+
+```{r}
+top10_bp <- head(BP_gsea[order(BP_gsea$padj, BP_gsea$pval), ], 10)
+top10_bp
+```
