@@ -57,7 +57,9 @@ target: name of the differentialy expressed genes
 
 background: all genes from our cleaned dataset
 
-### Calculate the enrichment 
+## Calculate the enrichment 
+
+### BP: Biological process
 
 ```{r}
 compute_enrichment <- function(ora, n_genes, n_universe) {
@@ -68,15 +70,37 @@ return(ora)
 }
 ```
 
-### Function for calculating the enrichment
+##### Function for calculating the enrichment
 
 ```{r}
 BP_gsea <- compute_enrichment(BP_gsea, length(target), length(background))
 ```
 
-### Top 10 significantly enriched pathways
+##### Top 10 significantly enriched pathways
 
 ```{r}
 top10_bp <- head(BP_gsea[order(BP_gsea$padj, BP_gsea$pval), ], 10)
 top10_bp
+```
+
+### MF: Molecular Function
+
+```{r}
+MF_gsea <- compute_enrichment(MF_gsea, length(target), length(background))
+```
+
+```{r}
+top10_mf <- head(MF_gsea[order(MF_gsea$padj, MF_gsea$pval), ], 10)
+top10_mf
+```
+
+### CC: Cellular Component
+
+```{r}
+CC_gsea <- compute_enrichment(CC_gsea, length(target), length(background))
+```
+
+```{r}
+top10_cc <- head(CC_gsea[order(MF_gsea$padj, CC_gsea$pval), ], 10)
+top10_cc
 ```
