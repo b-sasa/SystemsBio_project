@@ -194,7 +194,6 @@ pca_52_sex<-plotPCA(data_for_pca_with_c_52, intgroup = c("group", "sex"))+
     plot.title = element_text(size = 11),
     axis.title = element_text(size = 10),
     axis.text = element_text(size = 9),
-    legend.position = "bottom",
     legend.title = element_blank(),
     legend.text = element_text(size = 8)
   )
@@ -324,7 +323,6 @@ pca_79_sex<-plotPCA(data_for_pca_with_c_79, intgroup = c("group", "sex"))+
     plot.title = element_text(size = 11),
     axis.title = element_text(size = 10),
     axis.text = element_text(size = 9),
-    legend.position = "bottom",
     legend.title = element_blank(),
     legend.text = element_text(size = 8)
   )
@@ -365,8 +363,9 @@ dds79_deseq_with_c<-DESeq(dds79_deseq_r_with_c)
 
 ```{r}
 pca_only_c_both<-grid.arrange(pca1_52_only_c,pca1_79_only_c,nrow=2)
-pca_with_c_all<-grid.arrange(pca_52_sex,pca_79_sex,pca_52_batch,nrow=2)
 pca_with_c_all_age<-grid.arrange(pca_52_age,pca_79_age,nrow=2)
+pca_with_c_all_sex<-grid.arrange(pca_52_sex,pca_79_sex,nrow=2)
+pca_52_batch
 
 ```
 
