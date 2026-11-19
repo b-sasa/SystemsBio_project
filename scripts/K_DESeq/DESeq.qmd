@@ -1,0 +1,340 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# Prepartaions and checks
+
+## Libraries
+
+```{r}
+library(tidyverse)
+library(gridExtra)
+```
+
+## Load the data
+
+```{r}
+counts_df79<-read_tsv('../../data/clean/GSE119579_counts_clean.tsv')
+counts_df52<-read_tsv('../../data/clean/GSE158752_counts_clean.tsv')
+meta_df79<-read_csv('../../data/clean/GSE119579_metadata_clean.csv')
+meta_df52<-read_csv('../../data/clean/GSE158752_metadata_clean.csv')
+```
+
+## Checks
+
+```{r}
+sum(is.na(counts_df52))
+sum(is.na(counts_df79))
+colSums(is.na(meta_df52))
+colSums(is.na(meta_df79))
+identical(colnames(counts_df52)[-1],meta_df52$sample)
+identical(colnames(counts_df79)[-1],meta_df79$sample)
+identical(counts_df52$gene_id,counts_df79$gene_id)
+table(meta_df52$group)
+table(meta_df52$condition)
+table(meta_df79$group)
+table(meta_df79$condition)
+summary(as.numeric(as.matrix(counts_df52[,-1])))
+summary(as.numeric(as.matrix(counts_df79[,-1])))
+dim(counts_df52)
+dim(counts_df79)
+dim(meta_df52)
+dim(meta_df79)
+anyDuplicated(counts_df52$gene_id)
+anyDuplicated(counts_df79$gene_id)
+sapply(counts_df52[-1], class)
+sapply(counts_df79[-1], class)
+```
+
+# Distributions and log2 transform
+
+## Select random sample
+```{r}
+sample_id <- colnames(counts_df52)[10]
+
+df_counts52 <- data.frame(
+  expression = counts_df52[[sample_id]]
+)
+```
+
+## Raw distribution
+```{r}
+p1 <- df_counts52 %>% 
+  ggplot(aes(x = expression)) +
+  geom_histogram(
+    bins = 50,
+    fill = "lightgreen",
+    color = "black",
+    linewidth = 0.3
+  ) +
+  labs(
+    title = "Raw counts",
+    subtitle = sample_id,
+    x = "Raw count",
+    y = "Number of genes"
+  ) +
+  theme_classic(base_size = 13)
+  
+p1
+```
+
+## log2 distribution
+```{r}
+p2<-df_counts52 |>
+  ggplot(aes(x=log2(expression+1)))+
+  geom_histogram(
+    bins=50,
+    fill='cyan',
+    color='black',
+    linewidth = 0.3
+  )+
+  labs(title='Log2-transformed raw counts',
+       subtitle = sample_id,
+       x="log2(raw count)",
+    y = "Number of genes"
+  ) +
+  theme_classic(base_size = 13)
+
+p2
+```
+
+```{r}
+com_distr<-grid.arrange(p1,p2,ncol=2)
+```
+
+Raw RNA-seq counts showed a strongly right-skewed distribution, with most genes exhibiting low expression and a small number of highly expressed genes. Log2 transformation improved visualization of the expression distribution, revealing a substantial proportion of low-count genes.
+
+#DESeq
+
+```{r}
+library(DESeq2)
+```
+
+## Prepare for Deseq for geneset 52
+
+```{r}
+meta_df52 <- meta_df52 |>
+  mutate(
+    age = as.numeric(age),
+    sex = factor(sex),
+    batch = factor(batch),
+    group = factor(group, levels = c("control", "asthma"))
+  )
+```
+
+### Check
+```{r}
+table(meta_df52$group, meta_df52$sex)
+
+table(meta_df52$group, meta_df52$batch)
+
+summary(meta_df52$age[meta_df52$group == "control"])
+
+summary(meta_df52$age[meta_df52$group == "asthma"])
+```
+
+### DESeq only for condition
+```{r}
+dds52_only_c<-DESeqDataSetFromMatrix(
+  countData = as.matrix(counts_df52[-1]),
+  colData = meta_df52,
+  design = ~group
+)
+```
+
+#### Filtering
+
+```{r}
+keep_dds52_only_c<-rowSums(counts(dds52_only_c))>=10
+dds52_deseq_r_only_c<-dds52_only_c[keep_dds52_only_c,]
+```
+
+#### PCA plot only with condition
+
+```{r}
+pca1_52_only_c<-plotPCA(rlog(dds52_deseq_r_only_c), intgroup=c("condition"))+
+  ggtitle("PCA – Asthma vs Healthy Controls")
+```
+
+#### Run DESeq only for condition
+
+```{r}
+dds52_deseq_only_c<-DESeq(dds52_only_c)
+```
+
+### DESeq with confounders
+
+```{r}
+dds52_with_c<-DESeqDataSetFromMatrix(
+  countData = as.matrix(counts_df52[-1]),
+  colData = meta_df52,
+  design = ~age+sex+batch+group
+)
+```
+
+#### Filtering
+
+```{r}
+keep_dds52_with_c<-rowSums(counts(dds52_with_c))>=10
+dds52_deseq_r_with_c<-dds52_with_c[keep_dds52_with_c,]
+```
+
+#### PCA plot with confounders
+```{r}
+data_for_pca_with_c_52 <- rlog(dds52_deseq_r_with_c)
+
+pca_52_sex<-plotPCA(data_for_pca_with_c_52, intgroup = c("group", "sex"))+
+  ggtitle("PCA – Asthma vs Healthy Controls by gender")
+
+pca_52_batch<-plotPCA(data_for_pca_with_c_52, intgroup = c("group", "batch"))+
+  ggtitle("PCA – Asthma vs Healthy Controls by batch")
+```
+
+```{r}
+pca_age52 <- plotPCA(
+  data_for_pca_with_c_52,
+  intgroup = c('group',"age"),
+  returnData = TRUE
+)
+pca_age52$diagnosis<-colData(data_for_pca_with_c_52)$group
+
+percentVar_52 <- round(100 * attr(pca_age52, "percentVar"))
+
+pca_52_age<-ggplot(pca_age52, aes(PC1, PC2, color = age, shape = diagnosis)) +
+  geom_point(size = 3) +
+  scale_color_gradient(low = "lightblue", high = "darkblue") +
+  labs(
+    title = "PCA plot colored by age",
+    x = paste0("PC1: ", percentVar_52[1], "% variance"),
+    y = paste0("PC2: ", percentVar_52[2], "% variance"),
+    color = "Age",
+    shape = "Group")+
+  theme_classic()
+```
+
+#### Run DESeq with confounders
+
+```{r}
+dds52_deseq_with_c<-DESeq(dds52_deseq_r_with_c)
+```
+
+
+## Prepare for Deseq for geneset 79
+
+```{r}
+meta_df79 <- meta_df79 |>
+  mutate(
+    age = as.numeric(age),
+    sex = factor(sex),
+    group = factor(group, levels = c("control", "asthma"))
+  )
+```
+
+### Check
+```{r}
+table(meta_df79$group, meta_df79$sex)
+
+table(meta_df79$group, meta_df79$batch)
+
+summary(meta_df79$age[meta_df79$group == "control"])
+
+summary(meta_df79$age[meta_df79$group == "asthma"])
+```
+
+### DESeq only for condition
+```{r}
+dds79_only_c<-DESeqDataSetFromMatrix(
+  countData = as.matrix(counts_df79[-1]),
+  colData = meta_df79,
+  design = ~group
+)
+```
+
+#### Filtering
+
+```{r}
+keep_dds79_only_c<-rowSums(counts(dds79_only_c))>=10
+dds79_deseq_r_only_c<-dds79_only_c[keep_dds79_only_c,]
+```
+
+#### PCA plot only with condition
+
+```{r}
+pca1_79_only_c<-plotPCA(rlog(dds79_deseq_r_only_c), intgroup=c("condition"))+
+  ggtitle("PCA – Asthma vs Healthy Controls")
+```
+
+#### Run DESeq only for condition
+
+```{r}
+dds79_deseq_only_c<-DESeq(dds79_only_c)
+```
+
+### DESeq with confounders
+
+```{r}
+dds79_with_c<-DESeqDataSetFromMatrix(
+  countData = as.matrix(counts_df79[-1]),
+  colData = meta_df79,
+  design = ~age+sex+group
+)
+```
+
+#### Filtering
+
+```{r}
+keep_dds79_with_c<-rowSums(counts(dds79_with_c))>=10
+dds79_deseq_r_with_c<-dds79_with_c[keep_dds79_with_c,]
+```
+
+#### PCA plot with confounders
+```{r}
+data_for_pca_with_c_79 <- rlog(dds79_deseq_r_with_c)
+
+pca_79_sex<-plotPCA(data_for_pca_with_c_79, intgroup = c("group", "sex"))+
+  ggtitle("PCA – Asthma vs Healthy Controls by gender")
+```
+
+```{r}
+pca_age79 <- plotPCA(
+  data_for_pca_with_c_79,
+  intgroup = c('group',"age"),
+  returnData = TRUE
+)
+pca_age79$diagnosis <- colData(data_for_pca_with_c_79)$group
+
+percentVar_79 <- round(100 * attr(pca_age79, "percentVar"))
+
+pca_79_age<-ggplot(pca_age79, aes(PC1, PC2, color = age,shape=diagnosis)) +
+  geom_point(size = 3) +
+  scale_color_gradient(low = "lightblue", high = "darkblue") +
+  labs(
+    title = "PCA plot colored by age",
+    x = paste0("PC1: ", percentVar_79[1], "% variance"),
+    y = paste0("PC2: ", percentVar_79[2], "% variance"),
+    color = "Age",
+    shape = "Group")+
+  theme_classic()
+```
+
+#### Run DESeq with confounders
+
+```{r}
+dds79_deseq_with_c<-DESeq(dds79_deseq_r_with_c)
+```
+
+
+### Results of PCA
+
+```{r}
+pca_only_c_both<-grid.arrange(pca1_52_only_c,pca1_79_only_c,nrow=2)
+pca_with_c_all<-grid.arrange(pca_52_sex,pca_79_sex,pca_52_batch,nrow=2)
+pca_with_c_all_age<-grid.arrange(pca_52_age,pca_79_age,nrow=2)
+
+```
+
+
+### Volacano plots
+
