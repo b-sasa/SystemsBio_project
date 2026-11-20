@@ -678,7 +678,7 @@ seeds52 <- deseq_res52_tbl |>
 ## Save data for next analysis
 
 ```{r}
-readr::write_tsv(seeds52, "data/seeds_lists/GSE158752_seeds.tsv")
+readr::write_tsv(seeds52, "../../data/seeds_lists/GSE158752_seeds.tsv")
 readr::write_tsv(seeds79, "../../data/seeds_lists/GSE119579_seeds.tsv")
 
 readr::write_tsv(deseq_res52_tbl, "../../data/DESeq_res/GSE158752_DESeq2.tsv")
