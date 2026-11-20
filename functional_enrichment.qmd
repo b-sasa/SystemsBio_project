@@ -57,7 +57,7 @@ target: name of the differentialy expressed genes
 
 background: all genes from our cleaned dataset
 
-## Calculate the enrichment 
+## Calculate the enrichment
 
 ### BP: Biological process
 
