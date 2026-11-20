@@ -134,11 +134,17 @@ summary(meta_df52$age[meta_df52$group == "control"])
 
 summary(meta_df52$age[meta_df52$group == "asthma"])
 ```
+```{r}
+counts_mat52 <- counts_df52 |>
+  column_to_rownames("gene_id") |>
+  as.matrix()
+```
+
 
 ### DESeq only for condition
 ```{r}
 dds52_only_c<-DESeqDataSetFromMatrix(
-  countData = as.matrix(counts_df52[-1]),
+  countData = counts_mat52,
   colData = meta_df52,
   design = ~group
 )
@@ -161,14 +167,14 @@ pca1_52_only_c<-plotPCA(rlog(dds52_deseq_r_only_c), intgroup=c("condition"))+
 #### Run DESeq only for condition
 
 ```{r}
-dds52_deseq_only_c<-DESeq(dds52_only_c)
+dds52_deseq_only_c<-DESeq(dds52_deseq_r_only_c)
 ```
 
 ### DESeq with confounders
 
 ```{r}
 dds52_with_c<-DESeqDataSetFromMatrix(
-  countData = as.matrix(counts_df52[-1]),
+  countData = counts_mat52,
   colData = meta_df52,
   design = ~age+sex+batch+group
 )
@@ -263,11 +269,17 @@ summary(meta_df79$age[meta_df79$group == "control"])
 
 summary(meta_df79$age[meta_df79$group == "asthma"])
 ```
+```{r}
+counts_mat79 <- counts_df79 |>
+  column_to_rownames("gene_id") |>
+  as.matrix()
+```
+
 
 ### DESeq only for condition
 ```{r}
 dds79_only_c<-DESeqDataSetFromMatrix(
-  countData = as.matrix(counts_df79[-1]),
+  countData = counts_mat79,
   colData = meta_df79,
   design = ~group
 )
@@ -290,14 +302,14 @@ pca1_79_only_c<-plotPCA(rlog(dds79_deseq_r_only_c), intgroup=c("condition"))+
 #### Run DESeq only for condition
 
 ```{r}
-dds79_deseq_only_c<-DESeq(dds79_only_c)
+dds79_deseq_only_c<-DESeq(dds79_deseq_r_only_c)
 ```
 
 ### DESeq with confounders
 
 ```{r}
 dds79_with_c<-DESeqDataSetFromMatrix(
-  countData = as.matrix(counts_df79[-1]),
+  countData = counts_mat79,
   colData = meta_df79,
   design = ~age+sex+group
 )
