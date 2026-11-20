@@ -1,0 +1,125 @@
+---
+title: "isoform_expression"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+# Isoform usage
+
+## Loading libraries
+
+```{r}
+library(DEXSeq)
+library(fgsea)
+library(msigdbr)
+library(tidyverse)
+```
+
+## Turning categorical ariables into factors in metadata
+
+```{r}
+lihcMetaFull[c("sample", "condition", "gender")] <-
+lapply(lihcMetaFull[c("sample", "condition", "gender")], factor)
+```
+
+"sample", "condition", "gender" : replace them with the categorical variables in our dataset
+
+## Differential Isoform usage on Data Subset
+
+```{r}
+dxdSubset <- DEXSeqDataSet(
+countData = lichIsoCountSubset,
+sampleData = lihcMetaFull,
+design= ~ sample + exon + condition:exon + gender:exon,
+featureID = txInfoSubset$transcript_id,
+groupID = txInfoSubset$gene_id
+)
+```
+
+lichIsoCountSubset: the raw data counts for genes (not isoforms)
+
+lihcMetaFull: the metadata after turning the categorical variables into factors
+
+## Testing for differential isoform usage
+
+### Estimating size-factors
+
+```{r}
+dxdSubset <- estimateSizeFactors(dxdSubset)
+```
+
+### Estimating dispersion
+
+```{r}
+dxdSubset <- estimateDispersions(dxdSubset)
+```
+
+### Testing
+
+```{r}
+dxdSubset <- testForDEU(
+dxdSubset,
+fullModel = ~ sample + exon + condition:exon + gender:exon,
+reducedModel = ~ sample + exon + gender:exon
+)
+```
+
+### Exon Fold Changes
+
+```{r}
+dxdSubset <- estimateExonFoldChanges(dxdSubset, fitExpToVar = "condition")
+```
+
+## Getting the results of DEXSeq
+
+```{r}
+dxdResult <- DEXSeqResults(dxdSubset)
+```
+
+### Getting significant results
+
+Retrieving the isoforms with an adjusted p-value of 0.05
+
+```{r}
+alpha <- 0.05
+
+sig_iso <- dxdResult[!is.na(dxdResult$padj) & dxdResult$padj < alpha, ]
+n_sig_isoforms <- nrow(sig_iso)
+n_sig_isoforms
+```
+
+### Number of significant genes
+
+```{r}
+n_sig_genes <- length(unique(sig_iso$groupID))
+n_sig_genes
+```
+
+### Top 5 most significant genes
+
+```{r}
+sig_iso <- as.data.frame(sig_iso)
+dexseq_df <- sig_iso[order(sig_iso$padj), ]
+top5_genes <- dexseq_df$groupID[!is.na(dex_seq$padj)][1:5]
+```
