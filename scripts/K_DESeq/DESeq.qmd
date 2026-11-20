@@ -371,7 +371,7 @@ dds79_deseq_with_c<-DESeq(dds79_deseq_r_with_c)
 ```
 
 
-### Results of PCA
+## Results of PCA
 
 ```{r}
 pca_only_c_both<-grid.arrange(pca1_52_only_c,pca1_79_only_c,nrow=2)
@@ -381,7 +381,7 @@ pca_52_batch
 
 ```
 
-### Results
+## Results
 
 #### Extract results from DESeq
 ```{r}
@@ -581,7 +581,107 @@ volcano_spec_79<-ggplot(res_df_79, aes(x = log2FoldChange, y = -log10(padj))) +
 volcano_spec_79
 ```
 
-## Match gene IDs with symbols
+# Match gene IDs with symbols
 
+### Load annotation table
 
+```{r}
+gene_mapping <- readr::read_tsv(
+  "../../data/Entrez_to_Ensembl_Symbol_small.tsv",
+  col_types = readr::cols(.default = readr::col_character())
+)
+```
+
+### Check for duplicates
+```{r}
+gene_mapping |>
+  dplyr::count(GeneID) |>
+  dplyr::filter(n > 1)
+```
+
+### Map geneset ending in 79
+
+#### Check mapping
+```{r}
+gene_mapping |>
+  filter(GeneID %in% sig79_with)
+```
+
+#### Add ensemble id 
+```{r}
+deseq_res79_tbl <- as_tibble(res79_with_c, rownames = "GeneID") |>
+  left_join(gene_mapping, by = "GeneID")
+```
+
+#### Checks
+```{r}
+nrow(deseq_res79_tbl) == nrow(res79_with_c)
+#how many genes got and ensemble id
+sum(!is.na(deseq_res79_tbl$EnsemblGeneID)) 
+```
+
+### Map geneset ending in 52
+
+#### Check mapping
+```{r}
+gene_mapping |>
+  filter(GeneID %in% sig52_with)
+```
+
+#### Add ensemble id 
+```{r}
+deseq_res52_tbl <- as_tibble(res52_with_c, rownames = "GeneID") |>
+  left_join(gene_mapping, by = "GeneID")
+```
+
+#### Checks
+```{r}
+nrow(deseq_res52_tbl) == nrow(res52_with_c)
+#how many genes got and ensemble id
+sum(!is.na(deseq_res52_tbl$EnsemblGeneID)) 
+```
+
+### Check how many genes from the significant ones got an ensemble id
+
+```{r}
+deseq_res79_tbl |>
+  filter(!is.na(padj), padj < 0.05) |>
+  summarise(
+    significant = n(),
+    mapped = sum(!is.na(EnsemblGeneID))
+  )
+```
+
+```{r}
+deseq_res52_tbl |>
+  filter(!is.na(padj), padj < 0.05) |>
+  summarise(
+    significant = n(),
+    mapped = sum(!is.na(EnsemblGeneID))
+  )
+```
+
+# Create seeds lists
+
+```{r}
+seeds79 <- deseq_res79_tbl |>
+  filter(!is.na(padj), padj < 0.05) |>
+  dplyr::select(GeneID, Symbol, EnsemblGeneID, log2FoldChange, padj)
+```
+
+```{r}
+seeds52 <- deseq_res52_tbl |>
+  filter(!is.na(padj), padj < 0.05) |>
+  dplyr::select(GeneID, Symbol, EnsemblGeneID, log2FoldChange, padj)
+```
+
+## Save data for next analysis
+
+```{r}
+readr::write_tsv(seeds52, "data/seeds_lists/GSE158752_seeds.tsv")
+readr::write_tsv(seeds79, "../../data/seeds_lists/GSE119579_seeds.tsv")
+
+readr::write_tsv(deseq_res52_tbl, "../../data/DESeq_res/GSE158752_DESeq2.tsv")
+readr::write_tsv(deseq_res79_tbl, "../../data/DESeq_res/GSE119579_DESeq2.tsv")
+```
 
