@@ -381,6 +381,207 @@ pca_52_batch
 
 ```
 
+### Results
 
-### Volacano plots
+#### Extract results from DESeq
+```{r}
+# GSE158752
+res52_only_c <- results(
+  dds52_deseq_only_c,
+  contrast = c("group", "asthma", "control"),
+  alpha = 0.05
+)
+
+res52_with_c <- results(
+  dds52_deseq_with_c,
+  contrast = c("group", "asthma", "control"),
+  alpha = 0.05
+)
+
+# GSE119579
+res79_only_c <- results(
+  dds79_deseq_only_c,
+  contrast = c("group", "asthma", "control"),
+  alpha = 0.05
+)
+
+res79_with_c <- results(
+  dds79_deseq_with_c,
+  contrast = c("group", "asthma", "control"),
+  alpha = 0.05
+)
+```
+
+#### Filter for padj<0.05
+```{r}
+n_sig52_only <- sum(res52_only_c$padj < 0.05, na.rm = TRUE)
+n_sig52_with <- sum(res52_with_c$padj < 0.05, na.rm = TRUE)
+
+n_sig79_only <- sum(res79_only_c$padj < 0.05, na.rm = TRUE)
+n_sig79_with <- sum(res79_with_c$padj < 0.05, na.rm = TRUE)
+```
+
+#### Number of significant differentially expressed genes in each test
+```{r}
+c(
+  GSE158752_unadjusted = n_sig52_only,
+  GSE158752_adjusted = n_sig52_with,
+  GSE119579_unadjusted = n_sig79_only,
+  GSE119579_adjusted = n_sig79_with
+)
+```
+
+#### Number of common genes between the two tests for the dataset ending in 52
+```{r}
+sig52_only <- rownames(res52_only_c)[
+  !is.na(res52_only_c$padj) & res52_only_c$padj < 0.05
+]
+
+sig52_with <- rownames(res52_with_c)[
+  !is.na(res52_with_c$padj) & res52_with_c$padj < 0.05
+]
+
+n_common52 <- length(intersect(sig52_only, sig52_with))
+n_common52
+```
+
+#### Number of common genes between the two tests for the dataset ending in 79
+
+```{r}
+sig79_only <- rownames(res79_only_c)[
+  !is.na(res79_only_c$padj) & res79_only_c$padj < 0.05
+]
+
+sig79_with <- rownames(res79_with_c)[
+  !is.na(res79_with_c$padj) & res79_with_c$padj < 0.05
+]
+
+n_common79 <- length(intersect(sig79_only, sig79_with))
+sig79_only
+sig79_with
+n_common79
+```
+
+
+#### Test how many samples and genes were tested and how many had pval,padk <0.05 in dataset ending in 52
+```{r}
+c(
+  samples = ncol(dds52_deseq_with_c),
+  genes_tested = sum(!is.na(res52_with_c$padj)),
+  pvalue_below_005 = sum(res52_with_c$pvalue < 0.05, na.rm = TRUE),
+  padj_below_005 = sum(res52_with_c$padj < 0.05, na.rm = TRUE)
+)
+```
+
+#### Test how many samples and genes were tested and how many had pval,padk <0.05 in dataset ending in 79
+
+```{r}
+c(
+  samples = ncol(dds79_deseq_with_c),
+  genes_tested = sum(!is.na(res79_with_c$padj)),
+  pvalue_below_005 = sum(res79_with_c$pvalue < 0.05, na.rm = TRUE),
+  padj_below_005 = sum(res79_with_c$padj < 0.05, na.rm = TRUE)
+)
+```
+
+## Volacano plots
+### For the adjusted set ending in 52
+```{r}
+res_df_52 <- as_tibble(res52_with_c, rownames = "gene") |>
+  drop_na(padj, log2FoldChange) |>
+  mutate(
+    group = case_when(
+      padj < 0.05 & log2FoldChange > 0 ~ "Up in Asthma",
+      padj < 0.05 & log2FoldChange < 0 ~ "Up in Controls",
+      TRUE ~ "Not significant"
+    )
+  )
+
+top_labels_52 <- res_df_52 |>
+  filter(group != "Not significant") |>
+  slice_min(padj, n = 10)
+
+volcano_spec_52<-ggplot(res_df_52, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(color = group)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "Up in Asthma" = "firebrick",
+      "Up in Controls" = "steelblue",
+      "Not significant" = "grey80"
+    )
+  ) +
+  geom_text(
+    data = top_labels_52,
+    aes(label = gene),
+    size = 3,
+    vjust = -0.6,
+    check_overlap = TRUE
+  ) +
+  annotate("text", x = max(res_df_52$log2FoldChange), y = 0.3,
+           label = "Higher in Asthma \u2192", hjust = 1, size = 3,
+           fontface = "italic", color = "firebrick") +
+  annotate("text", x = min(res_df_52$log2FoldChange), y = 0.3,
+           label = "\u2190 Higher in Controls", hjust = 0, size = 3,
+           fontface = "italic", color = "steelblue") +
+  labs(x = "Log2 Fold Change",
+       y = "-Log10 Adjusted P-value",
+       title = "GSE158752 - Asthma vs Controls (Adjusted)") +
+  theme_minimal()
+volcano_spec_52
+```
+
+### For the adjusted set ending in 52
+
+```{r}
+res_df_79 <- as_tibble(res79_with_c, rownames = "gene") |>
+  drop_na(padj, log2FoldChange) |>
+  mutate(
+    group = case_when(
+      padj < 0.05 & log2FoldChange > 0 ~ "Up in Asthma",
+      padj < 0.05 & log2FoldChange < 0 ~ "Up in Controls",
+      TRUE ~ "Not significant"
+    )
+  )
+
+top_labels_79 <- res_df_79 |>
+  filter(group != "Not significant") |>
+  slice_min(padj, n = 10)
+
+volcano_spec_79<-ggplot(res_df_79, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(color = group)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "Up in Asthma" = "firebrick",
+      "Up in Controls" = "steelblue",
+      "Not significant" = "grey80"
+    )
+  ) +
+  ggrepel::geom_text_repel(
+  data = top_labels_79,
+  aes(label = gene),
+  size = 3,
+  max.overlaps = Inf
+) +
+  annotate("text", x = max(res_df_79$log2FoldChange), y = 0.3,
+           label = "Higher in Asthma \u2192", hjust = 1, size = 3,
+           fontface = "italic", color = "firebrick") +
+  annotate("text", x = min(res_df_79$log2FoldChange), y = 0.3,
+           label = "\u2190 Higher in Controls", hjust = 0, size = 3,
+           fontface = "italic", color = "steelblue") +
+  labs(x = "Log2 Fold Change",
+       y = "-Log10 Adjusted P-value",
+       title = "GSE119579 - Asthma vs Controls (Adjusted)") +
+  theme_minimal()
+volcano_spec_79
+```
+
+## Match gene IDs with symbols
+
+
 
