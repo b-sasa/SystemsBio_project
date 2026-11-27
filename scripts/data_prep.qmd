@@ -3,240 +3,202 @@ title: "data_prep"
 format: html
 ---
 
-### 0. Packages to use
+### 0. Packages
 
 ```{r}
 library(readxl)
 library(dplyr)
-library(DESeq2)
-library(ggplot2)
+library(tidyverse)
 ```
 
 ### 1. Load data
 
-Load both raw counts files and metadata files and check that samples in raw counts files and metadata files match.
+```{r}
+load('/home/projects/22140/exam_data/exam_functions.Rdata')
+isoInfo <- read_rds('/home/projects/22140/exam_data/Homo_sapiens.GRCh38.107.chr_patch_hapl_scaff_tx_info.Rds')
 
-Assign them to objects a and b (each one dataset).
+iso_79  <- loadIsoformCountMatrix("GSE119579,GSE119580")     # SuperSeries: use the combined ID
+gene_79 <- as.matrix(extractGeneCountMatrixFromIsoCounts(iso_79))
+
+iso_52  <- loadIsoformCountMatrix("GSE158752")     # SuperSeries: use the combined ID
+gene_52 <- as.matrix(extractGeneCountMatrixFromIsoCounts(iso_52))
+```
+
+### 2. Selection of samples
 
 ```{r}
-data_dir <- "data"
+samples_52 <- c("GSM4809681",
+                "GSM4809682",
+                "GSM4809684",
+                "GSM4809687",
+                "GSM4809688",
+                "GSM4809690",
+                "GSM4809692",
+                "GSM4809693",
+                "GSM4809694",
+                "GSM4809695",
+                "GSM4809697",
+                "GSM4809702",
+                "GSM4809708",
+                "GSM4809715",
+                "GSM4809716",
+                "GSM4809717",
+                "GSM4809718",
+                "GSM4809721",
+                "GSM4809725",
+                "GSM4809727",
+                "GSM4809729",
+                "GSM4809732",
+                "GSM4809735",
+                "GSM4809739",
+                "GSM4809740",
+                "GSM4809741",
+                "GSM4809743",
+                "GSM4809744",
+                "GSM4809745",
+                "GSM4809747"
+)
 
-load_dataset <- function(counts_file, meta_file) {
-  counts <- as.matrix(read.delim(file.path(data_dir, counts_file),
-                                 row.names = 1, check.names = FALSE))
-  storage.mode(counts) <- "integer"
-  
-  meta <- as.data.frame(read_excel(file.path(data_dir, meta_file), skip = 1))
-  rownames(meta) <- meta[["Sample Name"]]
-  
-  stopifnot(all(colnames(counts) %in% rownames(meta)))
-  meta <- meta[colnames(counts), ]
-  stopifnot(identical(rownames(meta), colnames(counts)))
-  
-  list(counts = counts, meta = meta)
-}
+samples_79 <- c("GSM3377882",
+                "GSM3377883",
+                "GSM3377884",
+                "GSM3377885",
+                "GSM3377886",
+                "GSM3377887",
+                "GSM3377888",
+                "GSM3377889",
+                "GSM3377890",
+                "GSM3377891",
+                "GSM3377892",
+                "GSM3377894"
+)
 
-a <- load_dataset("GSE119579_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE119579_metadata.xlsx")
-b <- load_dataset("GSE158752_raw_counts_GRCh38.p13_NCBI 2.tsv", "GSE158752_metadata.xlsx")
+iso_52 <- iso_52[, samples_52, drop = FALSE]
+gene_52 <- gene_52[, samples_52, drop = FALSE]
+
+iso_79 <- iso_79[, samples_79, drop = FALSE]
+gene_79 <- gene_79[, samples_79, drop = FALSE]
 
 ```
 
-### 2. Define variables 
-
-Factors that appear for metadata of each sample
+### 3. Import of datasets (from load_data) and metadata
 
 ```{r}
-a$meta <- a$meta |>
-  mutate(condition = factor(disease, levels = c("Nonasthmatic", "Asthmatic")),
-         sex = factor(sex), age = as.numeric(AGE))
+setwd("~/SystemsBio_project")
 
-b$meta <- b$meta |>
-  mutate(condition = factor(diagnosis, levels = c("Healthy Control", "M/M Asthma")),
-         sex = factor(gender), batch = factor(batch), age = as.numeric(AGE))
+meta_79 <- read_excel(
+  "data/GSE119579_metadata.xlsx",
+  skip = 1
+) |>
+  as.data.frame()
 
-# Quick checks
-dim(a$counts); dim(b$counts)
-table(a$meta$condition, a$meta$sex)
-table(b$meta$condition, b$meta$batch)
+rownames(meta_79) <- meta_79[["Sample Name"]]
+
+meta_52 <- read_excel(
+  "data/GSE158752_metadata.xlsx",
+  skip = 1
+) |>
+  as.data.frame()
+
+rownames(meta_52) <- meta_52[["Sample Name"]]
 ```
 
-### 3. Check missing values and same format in both data sets
+### 4. Checks of data
 
 ```{r}
-check_dataset <- function(x, meta_vars) {
-  cnt <- x$counts
-  counts_report <- c(
-    n_genes               = nrow(cnt),
-    n_samples             = ncol(cnt),
-    NA_in_counts          = sum(is.na(cnt)),
-    negative_counts       = sum(cnt < 0, na.rm = TRUE),
-    non_integer_counts    = sum(cnt != round(cnt), na.rm = TRUE),
-    duplicated_gene_ids   = sum(duplicated(rownames(cnt))),
-    empty_gene_ids        = sum(is.na(rownames(cnt)) | rownames(cnt) == ""),
-    duplicated_sample_ids = sum(duplicated(colnames(cnt))),
-    genes_all_zero        = sum(rowSums(cnt) == 0),   # reported only, filtered later
-    empty_samples         = sum(colSums(cnt) == 0)
+# Set sample names as row names
+rownames(meta_79) <- meta_79[["Sample Name"]]
+rownames(meta_52) <- meta_52[["Sample Name"]]
+
+# Align metadata with count matrices
+meta_79 <- meta_79[colnames(gene_79), , drop = FALSE]
+meta_52 <- meta_52[colnames(gene_52), , drop = FALSE]
+
+# Check alignment
+stopifnot(identical(rownames(meta_79), colnames(gene_79)))
+stopifnot(identical(rownames(meta_52), colnames(gene_52)))
+```
+
+### 5. Prepare variables
+
+```{r}
+meta_79 <- meta_79 |>
+  mutate(
+    condition = factor(
+      disease,
+      levels = c("Nonasthmatic", "Asthmatic")
+    ),
+    sex = factor(sex),
+    age = as.numeric(AGE)
   )
-  meta_report <- sapply(x$meta[meta_vars], function(v)
-    sum(is.na(v) | as.character(v) == "", na.rm = TRUE))
-  names(meta_report) <- paste0("missing_meta_", names(meta_report))
-  c(counts_report, meta_report)
-}
 
-report_a <- check_dataset(a, c("condition", "sex", "age"))
-report_b <- check_dataset(b, c("condition", "sex", "age", "batch"))
-
-all_rows <- union(names(report_a), names(report_b))
-
-report <- data.frame(
-  GSE119579 = report_a[all_rows],
-  GSE158752 = report_b[all_rows],
-  row.names = all_rows
-)
-print(report)
-
-# Stop if anything critical is found (NAs, negatives, non-integers, duplicates)
-critical <- c("NA_in_counts", "negative_counts", "non_integer_counts",
-              "duplicated_gene_ids", "empty_gene_ids", "duplicated_sample_ids")
-stopifnot(all(report[critical, ] == 0))
+meta_52 <- meta_52 |>
+  mutate(
+    condition = factor(
+      diagnosis,
+      levels = c("Healthy Control", "M/M Asthma")
+    ),
+    sex = factor(gender),
+    age = as.numeric(AGE),
+    batch = factor(batch)
+  )
 ```
 
-### 4. Put genes in same order for both datasets
+### 6. Create clean metadata
 
 ```{r}
-genes_a <- rownames(a$counts)
-genes_b <- rownames(b$counts)
-message(sprintf("Genes only in GSE119579: %d | only in GSE158752: %d | shared: %d",
-                length(setdiff(genes_a, genes_b)),
-                length(setdiff(genes_b, genes_a)),
-                length(intersect(genes_a, genes_b))))
-
-common_genes <- genes_a[genes_a %in% genes_b]   # keeps the order of GSE119579
-counts_a <- a$counts[common_genes, ]
-counts_b <- b$counts[common_genes, ]
-stopifnot(identical(rownames(counts_a), rownames(counts_b)))
-```
-
-### 5. Clean metadata to get same format for both datasets
-
-```{r}
-meta_a <- data.frame(
-  sample    = rownames(a$meta),
-  run       = a$meta$Run,
-  biosample = a$meta$BioSample,
-  dataset   = "GSE119579",
-  tissue    = a$meta$cell_type,
-  condition = as.character(a$meta$condition),
-  group     = ifelse(a$meta$condition == "Asthmatic", "asthma", "control"),
-  sex       = as.character(a$meta$sex),
-  age       = a$meta$age,
-  batch     = NA_character_,                     # no batch information in this dataset
-  stringsAsFactors = FALSE
+meta_79 <- data.frame(
+  sample = rownames(meta_79),
+  run = meta_79$Run,
+  biosample = meta_79$BioSample,
+  dataset = "GSE119579",
+  tissue = meta_79$cell_type,
+  condition = as.character(meta_79$condition),
+  group = ifelse(
+    meta_79$condition == "Asthmatic",
+    "asthma",
+    "control"
+  ),
+  sex = as.character(meta_79$sex),
+  age = meta_79$age,
+  batch = NA_character_
 )
 
-meta_b <- data.frame(
-  sample    = rownames(b$meta),
-  run       = b$meta$Run,
-  biosample = b$meta$BioSample,
-  dataset   = "GSE158752",
-  tissue    = b$meta$cell_type,
-  condition = as.character(b$meta$condition),
-  group     = ifelse(b$meta$condition == "M/M Asthma", "asthma", "control"),
-  sex       = as.character(b$meta$sex),
-  age       = b$meta$age,
-  batch     = as.character(b$meta$batch),
-  stringsAsFactors = FALSE
+meta_52 <- data.frame(
+  sample = rownames(meta_52),
+  run = meta_52$Run,
+  biosample = meta_52$BioSample,
+  dataset = "GSE158752",
+  tissue = meta_52$cell_type,
+  condition = as.character(meta_52$condition),
+  group = ifelse(
+    meta_52$condition == "M/M Asthma",
+    "asthma",
+    "control"
+  ),
+  sex = as.character(meta_52$sex),
+  age = meta_52$age,
+  batch = as.character(meta_52$batch)
+)
+```
+
+### 7. Check that both metadata have the same information (the count files we already know)
+
+```{r}
+identical(
+  colnames(meta_79),
+  colnames(meta_52)
 )
 
-# Final consistency checks
-stopifnot(identical(meta_a$sample, colnames(counts_a)),
-          identical(meta_b$sample, colnames(counts_b)),
-          identical(colnames(meta_a), colnames(meta_b)))
+str(meta_79)
+str(meta_52)
 ```
 
-### 6. Save clean files
+### 8. Check NA values
 
 ```{r}
-clean_dir <- file.path(data_dir, "clean")
-dir.create(clean_dir, recursive = TRUE, showWarnings = FALSE)
-
-write_counts <- function(m, file) {
-  write.table(data.frame(gene_id = rownames(m), m, check.names = FALSE),
-              file, sep = "\t", quote = FALSE, row.names = FALSE)
-}
-
-write_counts(counts_a, file.path(clean_dir, "GSE119579_counts_clean.tsv"))
-write_counts(counts_b, file.path(clean_dir, "GSE158752_counts_clean.tsv"))
-write.csv(meta_a, file.path(clean_dir, "GSE119579_metadata_clean.csv"), row.names = FALSE)
-write.csv(meta_b, file.path(clean_dir, "GSE158752_metadata_clean.csv"), row.names = FALSE)
-
-saveRDS(list(counts = counts_a, meta = meta_a), file.path(clean_dir, "GSE119579_clean.rds"))
-saveRDS(list(counts = counts_b, meta = meta_b), file.path(clean_dir, "GSE158752_clean.rds"))
-
-# Verify that the saved files read back identically
-chk <- as.matrix(read.delim(file.path(clean_dir, "GSE119579_counts_clean.tsv"),
-                            row.names = 1, check.names = FALSE))
-stopifnot(all(chk == counts_a), identical(rownames(chk), rownames(counts_a)))
-
-# Use the clean, aligned matrices in the rest of the script
-a$counts <- counts_a
-b$counts <- counts_b
+colSums(is.na(meta_79))
+colSums(is.na(meta_52))
 ```
 
-### 7. Creating DESeq object to normalize and filter for PCAs
-
-```{r}
-dds_a <- DESeqDataSetFromMatrix(a$counts, a$meta, design = ~ condition)
-dds_b <- DESeqDataSetFromMatrix(b$counts, b$meta, design = ~ condition)
-
-filter_genes <- function(dds) {
-  n_min <- min(table(dds$condition))
-  keep  <- rowSums(counts(dds) >= 10) >= n_min
-  message(sprintf("Genes: %d -> %d", nrow(dds), sum(keep)))
-  dds[keep, ]
-}
-dds_a <- filter_genes(dds_a)
-dds_b <- filter_genes(dds_b)
-
-```
-
-### 8. Normalization
-
-```{r}
-vsd_a <- vst(dds_a, blind = TRUE)
-vsd_b <- vst(dds_b, blind = TRUE)
-```
-
-### 9. PCA and saving of plots
-
-```{r}
-pca_plot <- function(vsd, color, title) {
-  plotPCA(vsd, intgroup = color) +
-    labs(title = title) +
-    theme_bw()
-}
-
-# GSE119579
-p_a_condition <- pca_plot(vsd_a, "condition", "GSE119579 - condition")
-p_a_sex       <- pca_plot(vsd_a, "sex",       "GSE119579 - sex")
-
-# GSE158752
-p_b_condition <- pca_plot(vsd_b, "condition", "GSE158752 - condition")
-p_b_sex       <- pca_plot(vsd_b, "sex",       "GSE158752 - sex")
-p_b_batch     <- pca_plot(vsd_b, "batch",     "GSE158752 - batch")
-
-# Run these one by one to see each plot
-p_a_condition
-p_a_sex
-p_b_condition
-p_b_sex
-p_b_batch
-
-dir.create("results", showWarnings = FALSE)
-
-ggsave("results/PCA_GSE119579_condition.png", p_a_condition, width = 6, height = 5, dpi = 300)
-ggsave("results/PCA_GSE119579_sex.png",       p_a_sex,       width = 6, height = 5, dpi = 300)
-ggsave("results/PCA_GSE158752_condition.png", p_b_condition, width = 6, height = 5, dpi = 300)
-ggsave("results/PCA_GSE158752_sex.png",       p_b_sex,       width = 6, height = 5, dpi = 300)
-ggsave("results/PCA_GSE158752_batch.png",     p_b_batch,     width = 6, height = 5, dpi = 300)
-```
+There aren't null values in the datasets.
